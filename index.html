@@ -1,494 +1,234 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <title>Padel Doubles Scheduler</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
-/* Styles for the Padel Doubles Scheduler */
 body {
-    font-family: Arial, sans-serif;
+    font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+    background: #f5f5f5;
     margin: 0;
     padding: 0;
-    background: #f5f5f5;
 }
 .container {
-    max-width: 800px;
+    max-width: 900px;
     margin: auto;
-    padding: 20px;
+    padding: 16px;
 }
-h1 {
-    text-align: center;
-}
+h1 { text-align: center; }
 .section {
-    margin-bottom: 20px;
-    padding: 10px;
-    background: #fff;
-    border-radius: 8px;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-}
-.section h2 {
-    margin-top: 0;
-}
-label {
-    display: block;
-    margin-top: 6px;
-}
-input[type="text"], input[type="number"], select {
-    width: 100%;
-    padding: 6px;
-    margin-top: 2px;
-}
-button {
-    margin-top: 10px;
-    padding: 8px 16px;
-    font-size: 14px;
-}
-.player-list {
-    list-style: none;
-    padding: 0;
-    margin: 0;
-}
-.player-item {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 4px 0;
-    border-bottom: 1px solid #eee;
-}
-.player-item input {
-    margin-right: 8px;
-}
-.history-table {
-    width: 100%;
-    border-collapse: collapse;
-}
-.history-table th,
-.history-table td {
-    padding: 8px;
-    border: 1px solid #ccc;
-    text-align: left;
-}
-.history-table th {
-    background: #eee;
-}
-.round-display {
-    margin-top: 10px;
-    background: #e6f7ff;
-    padding: 10px;
+    background: white;
+    padding: 12px;
+    margin-bottom: 12px;
     border-radius: 6px;
 }
-.toggle-container {
-    display: flex;
-    gap: 8px;
+label { display: block; margin-top: 8px; }
+input, select, button {
+    padding: 8px;
+    margin-top: 4px;
+    width: 100%;
 }
-@media (prefers-color-scheme: dark) {
-    body {
-        background: #111;
-        color: #eee;
-    }
-    .section {
-        background: #222;
-        box-shadow: none;
-    }
-    input, select {
-        background: #333;
-        color: #eee;
-        border: 1px solid #555;
-    }
-    button {
-        background: #444;
-        color: #eee;
-        border: 1px solid #666;
-    }
-    .history-table th {
-        background: #333;
-    }
-    .history-table td {
-        border-color: #444;
-    }
-    .round-display {
-        background: #1a3d5e;
-    }
+button {
+    background: #007aff;
+    color: white;
+    border: none;
+    border-radius: 4px;
 }
+button.secondary {
+    background: #888;
+}
+table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 8px;
+}
+th, td {
+    border-bottom: 1px solid #ddd;
+    padding: 6px;
+    text-align: center;
+}
+.small { font-size: 0.85em; color: #555; }
 </style>
 </head>
 <body>
+
 <div class="container">
 <h1>Padel Doubles Scheduler</h1>
 
-<div class="section" id="players-section">
-<h2>Players</h2>
-<label for="playerName">Add Player:</label>
-<div style="display:flex; gap:6px;">
-<input type="text" id="playerName" placeholder="Player name">
-<button id="addPlayerBtn">Add</button>
-</div>
-<ul id="playerList" class="player-list"></ul>
+<div class="section">
+<h3>Players</h3>
+<input id="playerName" placeholder="Add player name">
+<button onclick="addPlayer()">Add Player</button>
+<ul id="playerList"></ul>
 </div>
 
 <div class="section">
-<h2>Settings</h2>
-<label for="gameDuration">Game duration (minutes):</label>
-<input type="number" id="gameDuration" min="1" value="20">
-<label for="changeoverDuration">Changeover time (minutes):</label>
-<input type="number" id="changeoverDuration" min="0" value="5">
-<label>Randomness:</label>
-<div class="toggle-container">
-<label><input type="radio" name="randomMode" value="fun" checked> Fun random</label>
-<label><input type="radio" name="randomMode" value="fair"> Fair random</label>
-</div>
+<h3>Settings</h3>
+<label>Session start time
+<input type="time" id="startTime"></label>
+
+<label>Game duration (minutes)
+<input type="number" id="gameDuration"></label>
+
+<label>Changeover duration (minutes)
+<input type="number" id="changeDuration"></label>
+
+<label>Randomness
+<select id="mode">
+<option value="fun">Fun random</option>
+<option value="fair">Fair random</option>
+</select>
+</label>
 </div>
 
-<div class="section" id="scheduler-section">
-<h2>Scheduler</h2>
-<button id="generateRoundBtn">Generate Next Round</button>
-<div id="currentRound" class="round-display" style="display:none;"></div>
+<div class="section">
+<button onclick="generateRound()">Generate Next Round</button>
+<button class="secondary" onclick="deleteLast()">Delete Last Round</button>
 </div>
 
-<div class="section" id="history-section">
-<h2>History</h2>
-<table class="history-table" id="historyTable">
+<div class="section">
+<h3>History</h3>
+<table>
 <thead>
 <tr>
-<th>#</th>
+<th>Session</th>
+<th>Date</th>
 <th>Start</th>
 <th>End</th>
 <th>Team A</th>
 <th>Team B</th>
-<th>Sat Out</th>
-<th>Mode</th>
+<th>Sit Out</th>
 </tr>
 </thead>
-<tbody></tbody>
+<tbody id="history"></tbody>
 </table>
 </div>
 </div>
 
 <script>
-(function(){
-// DOM element references
-const playerListElement = document.getElementById('playerList');
-const historyTableBody = document.getElementById('historyTable').querySelector('tbody');
-const addPlayerBtn = document.getElementById('addPlayerBtn');
-const playerNameInput = document.getElementById('playerName');
-const gameDurationInput = document.getElementById('gameDuration');
-const changeoverDurationInput = document.getElementById('changeoverDuration');
-const generateRoundBtn = document.getElementById('generateRoundBtn');
-const currentRoundDiv = document.getElementById('currentRound');
+const LS_PLAYERS = 'padel_players';
+const LS_ROUNDS = 'padel_rounds';
+const LS_SETTINGS = 'padel_settings';
 
-// Data structures for players and history
-let players = [];
-let history = [];
-let lastRoundEnd = null;
+let players = JSON.parse(localStorage.getItem(LS_PLAYERS)) || [];
+let rounds = JSON.parse(localStorage.getItem(LS_ROUNDS)) || [];
+let settings = JSON.parse(localStorage.getItem(LS_SETTINGS)) || {
+    startTime: '18:00',
+    game: 20,
+    change: 5,
+    mode: 'fun'
+};
 
-// Save current state to localStorage
-function saveState() {
-    localStorage.setItem('padelSchedulerPlayers', JSON.stringify(players));
-    localStorage.setItem('padelSchedulerHistory', JSON.stringify(history));
+document.getElementById('startTime').value = settings.startTime;
+document.getElementById('gameDuration').value = settings.game;
+document.getElementById('changeDuration').value = settings.change;
+document.getElementById('mode').value = settings.mode;
+
+function saveSettings() {
+    settings = {
+        startTime: startTime.value,
+        game: +gameDuration.value,
+        change: +changeDuration.value,
+        mode: mode.value
+    };
+    localStorage.setItem(LS_SETTINGS, JSON.stringify(settings));
 }
 
-// Load state from localStorage
-function loadState() {
-    const storedPlayers = localStorage.getItem('padelSchedulerPlayers');
-    const storedHistory = localStorage.getItem('padelSchedulerHistory');
-    if (storedPlayers) {
-        try {
-            players = JSON.parse(storedPlayers);
-        } catch (e) {
-            players = [];
-        }
-    }
-    if (storedHistory) {
-        try {
-            history = JSON.parse(storedHistory);
-        } catch (e) {
-            history = [];
-        }
-    }
-    // Ensure player objects have required properties
-    players.forEach(p => {
-        if (typeof p.active === 'undefined') p.active = true;
-        if (typeof p.games === 'undefined') p.games = 0;
-        if (typeof p.sitouts === 'undefined') p.sitouts = 0;
-    });
-    // Determine last round end time if any
-    if (history.length > 0) {
-        const last = history[history.length - 1];
-        lastRoundEnd = new Date(last.end);
-    }
-}
+['startTime','gameDuration','changeDuration','mode'].forEach(id =>
+    document.getElementById(id).addEventListener('change', saveSettings)
+);
 
-// Render player list UI
-function renderPlayers() {
-    playerListElement.innerHTML = '';
-    players.forEach((player, index) => {
-        const li = document.createElement('li');
-        li.className = 'player-item';
-        const nameSpan = document.createElement('span');
-        nameSpan.textContent = player.name + (player.active ? '' : ' (inactive)');
-        if (!player.active) {
-            nameSpan.style.opacity = '0.5';
-        }
-        const controlsDiv = document.createElement('div');
-        // Toggle active status checkbox
-        const activeToggle = document.createElement('input');
-        activeToggle.type = 'checkbox';
-        activeToggle.checked = player.active;
-        activeToggle.title = 'Toggle player active status';
-        activeToggle.addEventListener('change', () => {
-            player.active = activeToggle.checked;
-            saveState();
-            renderPlayers();
-        });
-        // Remove player button
-        const removeBtn = document.createElement('button');
-        removeBtn.textContent = 'Remove';
-        removeBtn.title = 'Remove player';
-        removeBtn.addEventListener('click', () => {
-            players.splice(index, 1);
-            saveState();
-            renderPlayers();
-            renderHistory();
-        });
-        controlsDiv.appendChild(activeToggle);
-        controlsDiv.appendChild(removeBtn);
-        li.appendChild(nameSpan);
-        li.appendChild(controlsDiv);
-        playerListElement.appendChild(li);
-    });
-}
-
-// Render history table UI
-function renderHistory() {
-    historyTableBody.innerHTML = '';
-    history.forEach((round, idx) => {
-        const row = document.createElement('tr');
-        const numberCell = document.createElement('td');
-        numberCell.textContent = idx + 1;
-        const startCell = document.createElement('td');
-        startCell.textContent = new Date(round.start).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
-        const endCell = document.createElement('td');
-        endCell.textContent = new Date(round.end).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
-        const teamACell = document.createElement('td');
-        teamACell.textContent = round.teamA.join(' & ');
-        const teamBCell = document.createElement('td');
-        teamBCell.textContent = round.teamB.join(' & ');
-        const sitCell = document.createElement('td');
-        sitCell.textContent = round.satOut.join(', ');
-        const modeCell = document.createElement('td');
-        modeCell.textContent = round.mode || 'fun';
-        row.appendChild(numberCell);
-        row.appendChild(startCell);
-        row.appendChild(endCell);
-        row.appendChild(teamACell);
-        row.appendChild(teamBCell);
-        row.appendChild(sitCell);
-        row.appendChild(modeCell);
-        historyTableBody.appendChild(row);
-    });
-}
-
-// Add new player
 function addPlayer() {
-    const name = playerNameInput.value.trim();
+    const name = playerName.value.trim();
     if (!name) return;
-    // Prevent duplicates
-    if (players.some(p => p.name.toLowerCase() === name.toLowerCase())) {
-        alert('Player already exists.');
-        return;
-    }
-    players.push({name: name, games: 0, sitouts: 0, active: true});
-    playerNameInput.value = '';
-    saveState();
+    players.push(name);
+    localStorage.setItem(LS_PLAYERS, JSON.stringify(players));
+    playerName.value = '';
     renderPlayers();
 }
 
-// Shuffle array for random selection
-function shuffleArray(array) {
-    for (let i = array.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [array[i], array[j]] = [array[j], array[i]];
-    }
+function renderPlayers() {
+    playerList.innerHTML = '';
+    players.forEach(p => {
+        const li = document.createElement('li');
+        li.textContent = p;
+        playerList.appendChild(li);
+    });
 }
 
-// Generate next round schedule
-function generateNextRound() {
-    const activePlayers = players.filter(p => p.active);
-    if (activePlayers.length < 4) {
-        alert('Need at least 4 active players to generate a round.');
-        return;
+function shuffle(arr) {
+    return arr.sort(() => Math.random() - 0.5);
+}
+
+function generateRound() {
+    if (players.length < 4) return alert('Need at least 4 players');
+
+    const prev = rounds[rounds.length - 1];
+    let session = prev ? prev.session : 1;
+
+    let start = prev
+        ? new Date(prev.end)
+        : new Date(`${new Date().toDateString()} ${settings.startTime}`);
+
+    if (prev && start < new Date(prev.start)) {
+        session++;
+        start = new Date(`${new Date().toDateString()} ${settings.startTime}`);
     }
-    const mode = document.querySelector('input[name="randomMode"]:checked').value;
-    let selectedPlayers = [];
-    let satOutPlayers = [];
-    if (activePlayers.length === 4) {
-        selectedPlayers = activePlayers.slice();
-    } else {
-        // Sort players by games played (ascending) and sitouts (ascending)
-        const sorted = activePlayers.slice().sort((a,b) => {
-            if (a.games !== b.games) return a.games - b.games;
-            if (a.sitouts !== b.sitouts) return a.sitouts - b.sitouts;
-            return Math.random() - 0.5;
-        });
-        // Determine how many players will actually play (multiple of 4)
-        const groupSize = 4;
-        const numPlayers = Math.floor(sorted.length / groupSize) * groupSize;
-        selectedPlayers = sorted.slice(0, numPlayers);
-        satOutPlayers = sorted.slice(numPlayers);
-    }
-    // For one court, only 4 players play at a time
-    let roundPlayers;
-    if (selectedPlayers.length > 4) {
-        roundPlayers = selectedPlayers.slice(0, 4);
-        satOutPlayers = satOutPlayers.concat(selectedPlayers.slice(4));
-    } else {
-        roundPlayers = selectedPlayers;
-    }
-    // Determine team assignment
-    let teamAssignment;
-    if (mode === 'fair') {
-        teamAssignment = chooseFairTeams(roundPlayers);
-    } else {
-        // Fun random: shuffle and split
-        const arr = roundPlayers.slice();
-        shuffleArray(arr);
-        teamAssignment = {
-            teamA: [arr[0].name, arr[1].name],
-            teamB: [arr[2].name, arr[3].name]
-        };
-    }
-    // Calculate start and end times
-    const gameMins = parseInt(gameDurationInput.value, 10) || 0;
-    const changeoverMins = parseInt(changeoverDurationInput.value, 10) || 0;
-    const now = new Date();
-    let startTime;
-    if (lastRoundEnd && lastRoundEnd > now) {
-        startTime = new Date(lastRoundEnd.getTime());
-    } else {
-        startTime = new Date(now.getTime());
-    }
-    const endTime = new Date(startTime.getTime() + gameMins*60*1000 + changeoverMins*60*1000);
-    lastRoundEnd = endTime;
-    // Update player statistics
-    roundPlayers.forEach(p => {
-        const obj = players.find(pl => pl.name === p.name);
-        if (obj) {
-            obj.games = (obj.games || 0) + 1;
-        }
-    });
-    satOutPlayers.forEach(p => {
-        const obj = players.find(pl => pl.name === p.name);
-        if (obj) {
-            obj.sitouts = (obj.sitouts || 0) + 1;
-        }
-    });
-    // Update history
-    history.push({
-        start: startTime.toISOString(),
-        end: endTime.toISOString(),
-        teamA: teamAssignment.teamA,
-        teamB: teamAssignment.teamB,
-        satOut: satOutPlayers.map(p => p.name),
-        mode: mode
-    });
-    // Persist and re-render
-    saveState();
-    renderPlayers();
+
+    const end = new Date(start.getTime() + settings.game * 60000);
+
+    let pool = [...players];
+    shuffle(pool);
+
+    const active = pool.slice(0, 4);
+    const sitOut = pool.slice(4);
+
+    const round = {
+        session,
+        date: start.toISOString().slice(0,10),
+        start: start.toISOString(),
+        end: end.toISOString(),
+        teamA: active.slice(0,2),
+        teamB: active.slice(2,4),
+        sitOut
+    };
+
+    rounds.push(round);
+    localStorage.setItem(LS_ROUNDS, JSON.stringify(rounds));
     renderHistory();
-    displayCurrentRound(teamAssignment, startTime, endTime, satOutPlayers, mode);
 }
 
-// Choose fair teams by minimizing repeat partners/opponents
-function chooseFairTeams(roundPlayers) {
-    const partnerCount = {};
-    const opponentCount = {};
-    function incPairCount(map, a, b) {
-        const key = a < b ? a + '__' + b : b + '__' + a;
-        map[key] = (map[key] || 0) + 1;
-    }
-    history.forEach(r => {
-        if (r.teamA && r.teamB) {
-            incPairCount(partnerCount, r.teamA[0], r.teamA[1]);
-            incPairCount(partnerCount, r.teamB[0], r.teamB[1]);
-            r.teamA.forEach(a => {
-                r.teamB.forEach(b => {
-                    incPairCount(opponentCount, a, b);
-                });
-            });
-        }
-    });
-    function getPairCount(map, a, b) {
-        const key = a < b ? a + '__' + b : b + '__' + a;
-        return map[key] || 0;
-    }
-    const names = roundPlayers.map(p => p.name);
-    const combinations = [
-        {teamA: [names[0], names[1]], teamB: [names[2], names[3]]},
-        {teamA: [names[0], names[2]], teamB: [names[1], names[3]]},
-        {teamA: [names[0], names[3]], teamB: [names[1], names[2]]}
-    ];
-    let minPenalty = Infinity;
-    let bestComb = combinations[0];
-    combinations.forEach(comb => {
-        let penalty = 0;
-        // Partner penalty weighted heavier
-        penalty += getPairCount(partnerCount, comb.teamA[0], comb.teamA[1]) * 3;
-        penalty += getPairCount(partnerCount, comb.teamB[0], comb.teamB[1]) * 3;
-        // Opponent penalty
-        comb.teamA.forEach(a => {
-            comb.teamB.forEach(b => {
-                penalty += getPairCount(opponentCount, a, b);
-            });
+function deleteLast() {
+    rounds.pop();
+    localStorage.setItem(LS_ROUNDS, JSON.stringify(rounds));
+    renderHistory();
+}
+
+function renderHistory() {
+    history.innerHTML = '';
+    [...rounds]
+        .sort((a,b) =>
+            b.date.localeCompare(a.date) ||
+            new Date(a.start) - new Date(b.start)
+        )
+        .forEach(r => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+            <td>${r.session}</td>
+            <td>${r.date.split('-').reverse().join('-')}</td>
+            <td>${new Date(r.start).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</td>
+            <td>${new Date(r.end).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</td>
+            <td>${r.teamA.join(' & ')}</td>
+            <td>${r.teamB.join(' & ')}</td>
+            <td class="small">${r.sitOut.join(', ')}</td>`;
+            history.appendChild(tr);
         });
-        if (penalty < minPenalty) {
-            minPenalty = penalty;
-            bestComb = comb;
-        } else if (penalty === minPenalty && Math.random() < 0.5) {
-            bestComb = comb;
-        }
-    });
-    return bestComb;
 }
 
-// Display current round information
-function displayCurrentRound(assignment, startTime, endTime, satPlayers, mode) {
-    currentRoundDiv.style.display = 'block';
-    currentRoundDiv.innerHTML = '';
-    const h3 = document.createElement('h3');
-    h3.textContent = 'Current Round';
-    currentRoundDiv.appendChild(h3);
-    const pTime = document.createElement('p');
-    pTime.textContent = 'Start: ' + startTime.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) +
-        ' | End: ' + endTime.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
-    currentRoundDiv.appendChild(pTime);
-    const pTeamA = document.createElement('p');
-    pTeamA.innerHTML = '<strong>Team A:</strong> ' + assignment.teamA.join(' & ');
-    currentRoundDiv.appendChild(pTeamA);
-    const pTeamB = document.createElement('p');
-    pTeamB.innerHTML = '<strong>Team B:</strong> ' + assignment.teamB.join(' & ');
-    currentRoundDiv.appendChild(pTeamB);
-    if (satPlayers.length > 0) {
-        const pSit = document.createElement('p');
-        pSit.innerHTML = '<strong>Sat Out:</strong> ' + satPlayers.map(p => p.name).join(', ');
-        currentRoundDiv.appendChild(pSit);
-    }
-    const pMode = document.createElement('p');
-    pMode.innerHTML = '<strong>Mode:</strong> ' + (mode === 'fair' ? 'Fair random' : 'Fun random');
-    currentRoundDiv.appendChild(pMode);
-}
-
-// Event listeners
-addPlayerBtn.addEventListener('click', addPlayer);
-playerNameInput.addEventListener('keyup', (e) => {
-    if (e.key === 'Enter') addPlayer();
-});
-generateRoundBtn.addEventListener('click', generateNextRound);
-
-// Initialize state on page load
-loadState();
 renderPlayers();
 renderHistory();
-})();
 </script>
+
 </body>
 </html>
