@@ -3,8 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <title>Padel Doubles Scheduler</title>
+
 <style>
-/* Styles for the Padel Doubles Scheduler */
 body {
     font-family: Arial, sans-serif;
     margin: 0;
@@ -24,16 +24,14 @@ h1 {
     padding: 10px;
     background: #fff;
     border-radius: 8px;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-}
-.section h2 {
-    margin-top: 0;
 }
 label {
     display: block;
     margin-top: 6px;
 }
-input[type="text"], input[type="number"], input[type="time"], select {
+input[type="text"],
+input[type="number"],
+input[type="time"] {
     width: 100%;
     padding: 6px;
     margin-top: 2px;
@@ -41,22 +39,11 @@ input[type="text"], input[type="number"], input[type="time"], select {
 button {
     margin-top: 10px;
     padding: 8px 16px;
-    font-size: 14px;
-}
-.player-list {
-    list-style: none;
-    padding: 0;
-    margin: 0;
 }
 .player-item {
     display: flex;
     justify-content: space-between;
-    align-items: center;
     padding: 4px 0;
-    border-bottom: 1px solid #eee;
-}
-.player-item input {
-    margin-right: 8px;
 }
 .history-table {
     width: 100%;
@@ -64,96 +51,65 @@ button {
 }
 .history-table th,
 .history-table td {
-    padding: 8px;
+    padding: 6px;
     border: 1px solid #ccc;
-    text-align: left;
-}
-.history-table th {
-    background: #eee;
 }
 .round-display {
-    margin-top: 10px;
     background: #e6f7ff;
     padding: 10px;
     border-radius: 6px;
 }
-.toggle-container {
-    display: flex;
-    gap: 8px;
-}
-@media (prefers-color-scheme: dark) {
-    body {
-        background: #111;
-        color: #eee;
-    }
-    .section {
-        background: #222;
-        box-shadow: none;
-    }
-    input, select {
-        background: #333;
-        color: #eee;
-        border: 1px solid #555;
-    }
-    button {
-        background: #444;
-        color: #eee;
-        border: 1px solid #666;
-    }
-    .history-table th {
-        background: #333;
-    }
-    .history-table td {
-        border-color: #444;
-    }
-    .round-display {
-        background: #1a3d5e;
-    }
+.small-note {
+    font-size: 12px;
+    opacity: 0.7;
 }
 </style>
 </head>
+
 <body>
 <div class="container">
 <h1>Padel Doubles Scheduler</h1>
 
-<div class="section" id="players-section">
+<div class="section">
 <h2>Players</h2>
-<label for="playerName">Add Player:</label>
-<div style="display:flex; gap:6px;">
-<input type="text" id="playerName" placeholder="Player name">
-<button id="addPlayerBtn">Add</button>
-</div>
-<ul id="playerList" class="player-list"></ul>
+<input id="playerName" placeholder="Player name">
+<button onclick="addPlayer()">Add</button>
+<ul id="playerList"></ul>
 </div>
 
 <div class="section">
 <h2>Settings</h2>
 
-<label for="startTime">Start time (HH:MM):</label>
+<label>Start time</label>
 <input type="time" id="startTime">
 
-<label for="gameDuration">Game duration (minutes):</label>
-<input type="number" id="gameDuration" min="1" value="20">
+<label>Game duration (min)</label>
+<input type="number" id="gameDuration" value="20">
 
-<label for="changeoverDuration">Changeover time (minutes):</label>
-<input type="number" id="changeoverDuration" min="0" value="5">
+<label>Changeover (min)</label>
+<input type="number" id="changeoverDuration" value="5">
 
-<label>Randomness:</label>
-<div class="toggle-container">
-<label><input type="radio" name="randomMode" value="fun" checked> Fun random</label>
-<label><input type="radio" name="randomMode" value="fair"> Fair random</label>
+<label>
+<input type="radio" name="mode" value="fun" checked> Fun random
+</label>
+<label>
+<input type="radio" name="mode" value="fair"> Fair random
+</label>
+
+<div class="small-note">
+Start time is used only for the <b>first round of a session</b>.  
+Changing it backwards starts a <b>new session</b>.
 </div>
 </div>
 
-<div class="section" id="scheduler-section">
-<h2>Scheduler</h2>
-<button id="generateRoundBtn">Generate Next Round</button>
-<div id="currentRound" class="round-display" style="display:none;"></div>
+<div class="section">
+<button onclick="generateRound()">Generate Next Round</button>
+<div id="currentRound" class="round-display" style="display:none"></div>
 </div>
 
-<div class="section" id="history-section">
+<div class="section">
 <h2>History</h2>
-<table class="history-table" id="historyTable">
+<table class="history-table">
 <thead>
 <tr>
 <th>Session</th>
@@ -163,690 +119,161 @@ button {
 <th>End</th>
 <th>Team A</th>
 <th>Team B</th>
-<th>Sat Out</th>
-<th>Mode</th>
-<th>Action</th>
+<th>Sat out</th>
+<th></th>
 </tr>
 </thead>
-<tbody></tbody>
+<tbody id="historyBody"></tbody>
 </table>
 </div>
 </div>
 
 <script>
-(function(){
-// DOM element references
-const playerListElement = document.getElementById('playerList');
-const historyTableBody = document.getElementById('historyTable').querySelector('tbody');
-const addPlayerBtn = document.getElementById('addPlayerBtn');
-const playerNameInput = document.getElementById('playerName');
-const startTimeInput = document.getElementById('startTime');
-const gameDurationInput = document.getElementById('gameDuration');
-const changeoverDurationInput = document.getElementById('changeoverDuration');
-const generateRoundBtn = document.getElementById('generateRoundBtn');
-const currentRoundDiv = document.getElementById('currentRound');
+const KEY_PLAYERS = "padel_players";
+const KEY_HISTORY = "padel_history";
+const KEY_PREFS = "padel_prefs";
 
-// Storage keys
-const KEY_PLAYERS = 'padelSchedulerPlayers';
-const KEY_HISTORY = 'padelSchedulerHistory';
-const KEY_PREFS = 'padelSchedulerPrefs'; // startTime, gameDuration, changeoverDuration, randomMode
+let players = JSON.parse(localStorage.getItem(KEY_PLAYERS) || "[]");
+let history = JSON.parse(localStorage.getItem(KEY_HISTORY) || "[]");
 
-// Data structures for players and history
-let players = [];
-let history = [];
-let lastRoundEnd = null;   // end-of-game (NOT incl changeover)
-let lastRoundStart = null; // start-of-game
-let currentSession = 1;
+let prefs = JSON.parse(localStorage.getItem(KEY_PREFS) || "{}");
+prefs.startTime ??= next5Min();
+prefs.gameDuration ??= 20;
+prefs.changeoverDuration ??= 5;
 
-// Preferences persisted (only these; other UI state is not persisted)
-let prefs = {
-    startTime: '',          // HH:MM
-    gameDuration: 20,
-    changeoverDuration: 5,
-    randomMode: 'fun'
-};
+let lastStart = history.length ? new Date(history.at(-1).start) : null;
+let lastEnd   = history.length ? new Date(history.at(-1).end) : null;
+let currentSession = history.length ? history.at(-1).session : 1;
 
-// Save current state to localStorage
-function saveState() {
+document.getElementById("startTime").value = prefs.startTime;
+document.getElementById("gameDuration").value = prefs.gameDuration;
+document.getElementById("changeoverDuration").value = prefs.changeoverDuration;
+
+renderPlayers();
+renderHistory();
+
+function addPlayer() {
+    const name = playerName.value.trim();
+    if (!name || players.includes(name)) return;
+    players.push(name);
+    save();
+    renderPlayers();
+}
+
+function generateRound() {
+    if (players.length < 4) return alert("Need at least 4 players");
+
+    const startSetting = startTime.value || prefs.startTime;
+    prefs.startTime = startSetting;
+    prefs.gameDuration = +gameDuration.value;
+    prefs.changeoverDuration = +changeoverDuration.value;
+    localStorage.setItem(KEY_PREFS, JSON.stringify(prefs));
+
+    const baseStart = combineToday(startSetting);
+    let start;
+
+    if (!lastStart || baseStart <= lastStart) {
+        currentSession++;
+        start = baseStart;
+    } else {
+        start = new Date(lastEnd.getTime() + prefs.changeoverDuration * 60000);
+    }
+
+    const end = new Date(start.getTime() + prefs.gameDuration * 60000);
+
+    const shuffled = [...players].sort(() => Math.random() - 0.5);
+    const teamA = shuffled.slice(0,2);
+    const teamB = shuffled.slice(2,4);
+    const sat   = shuffled.slice(4);
+
+    const roundNo = history.filter(h => h.session === currentSession).length + 1;
+
+    history.push({
+        session: currentSession,
+        round: roundNo,
+        start,
+        end,
+        teamA,
+        teamB,
+        sat
+    });
+
+    lastStart = start;
+    lastEnd = end;
+
+    save();
+    renderHistory();
+    showCurrent(start, end, teamA, teamB, sat);
+}
+
+function renderPlayers() {
+    playerList.innerHTML = "";
+    players.forEach(p => {
+        const li = document.createElement("li");
+        li.className = "player-item";
+        li.innerHTML = `${p} <button onclick="removePlayer('${p}')">x</button>`;
+        playerList.appendChild(li);
+    });
+}
+
+function renderHistory() {
+    historyBody.innerHTML = "";
+    history
+      .slice()
+      .sort((a,b)=>b.start-a.start)
+      .forEach((h,i)=>{
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+        <td>${h.session}</td>
+        <td>${h.round}</td>
+        <td>${fmtDate(h.start)}</td>
+        <td>${fmtTime(h.start)}</td>
+        <td>${fmtTime(h.end)}</td>
+        <td>${h.teamA.join(" & ")}</td>
+        <td>${h.teamB.join(" & ")}</td>
+        <td>${h.sat.join(", ")}</td>
+        <td>${i===0?'<button onclick="deleteLast()">Delete</button>':''}</td>`;
+        historyBody.appendChild(tr);
+      });
+}
+
+function deleteLast() {
+    history.pop();
+    save();
+    location.reload();
+}
+
+function showCurrent(s,e,a,b,so) {
+    currentRound.style.display="block";
+    currentRound.innerHTML=`
+    <b>${fmtDate(s)}</b><br>
+    ${fmtTime(s)} - ${fmtTime(e)}<br>
+    Team A: ${a.join(" & ")}<br>
+    Team B: ${b.join(" & ")}<br>
+    Sat out: ${so.join(", ")}`;
+}
+
+function save(){
     localStorage.setItem(KEY_PLAYERS, JSON.stringify(players));
     localStorage.setItem(KEY_HISTORY, JSON.stringify(history));
 }
 
-// Save persisted preferences to localStorage
-function savePrefs() {
-    localStorage.setItem(KEY_PREFS, JSON.stringify(prefs));
-}
-
-// Load state from localStorage
-function loadState() {
-    const storedPlayers = localStorage.getItem(KEY_PLAYERS);
-    const storedHistory = localStorage.getItem(KEY_HISTORY);
-    const storedPrefs = localStorage.getItem(KEY_PREFS);
-
-    if (storedPlayers) {
-        try { players = JSON.parse(storedPlayers); } catch (e) { players = []; }
-    }
-    if (storedHistory) {
-        try { history = JSON.parse(storedHistory); } catch (e) { history = []; }
-    }
-    if (storedPrefs) {
-        try {
-            const p = JSON.parse(storedPrefs);
-            if (p && typeof p === 'object') {
-                if (typeof p.startTime === 'string') prefs.startTime = p.startTime;
-                if (Number.isFinite(p.gameDuration)) prefs.gameDuration = p.gameDuration;
-                if (Number.isFinite(p.changeoverDuration)) prefs.changeoverDuration = p.changeoverDuration;
-                if (p.randomMode === 'fun' || p.randomMode === 'fair') prefs.randomMode = p.randomMode;
-            }
-        } catch (e) {
-            // keep defaults
-        }
-    } else {
-        // default start time to "now rounded up to next 5 minutes"
-        prefs.startTime = defaultStartTimeHHMM();
-        savePrefs();
-    }
-
-    // Ensure player objects have required properties
-    players.forEach(p => {
-        if (typeof p.active === 'undefined') p.active = true;
-        if (typeof p.games === 'undefined') p.games = 0;
-        if (typeof p.sitouts === 'undefined') p.sitouts = 0;
-    });
-
-    // Ensure rounds have required properties
-    history.forEach(r => {
-        if (!r.createdAt) r.createdAt = Date.now();
-        if (!r.id) r.id = cryptoRandomId();
-        if (!r.session) r.session = 1;
-        if (!r.roundInSession) r.roundInSession = 1;
-    });
-
-    // Determine last round times / session if any
-    if (history.length > 0) {
-        const lastByCreated = getLatestRound();
-        lastRoundEnd = new Date(lastByCreated.end);
-        lastRoundStart = new Date(lastByCreated.start);
-        currentSession = lastByCreated.session || 1;
-    }
-
-    // Apply prefs to UI
-    startTimeInput.value = prefs.startTime || defaultStartTimeHHMM();
-    gameDurationInput.value = String(prefs.gameDuration);
-    changeoverDurationInput.value = String(prefs.changeoverDuration);
-    const modeRadio = document.querySelector('input[name="randomMode"][value="' + prefs.randomMode + '"]');
-    if (modeRadio) modeRadio.checked = true;
-
-    // Recompute player stats from history (useful after deletes / edits)
-    recomputePlayerStatsFromHistory();
-}
-
-// Render player list UI
-function renderPlayers() {
-    playerListElement.innerHTML = '';
-    players.forEach((player, index) => {
-        const li = document.createElement('li');
-        li.className = 'player-item';
-        const nameSpan = document.createElement('span');
-        nameSpan.textContent = player.name + (player.active ? '' : ' (inactive)');
-        if (!player.active) {
-            nameSpan.style.opacity = '0.5';
-        }
-        const controlsDiv = document.createElement('div');
-
-        // Toggle active status checkbox
-        const activeToggle = document.createElement('input');
-        activeToggle.type = 'checkbox';
-        activeToggle.checked = player.active;
-        activeToggle.title = 'Toggle player active status';
-        activeToggle.addEventListener('change', () => {
-            player.active = activeToggle.checked;
-            saveState();
-            renderPlayers();
-        });
-
-        // Remove player button
-        const removeBtn = document.createElement('button');
-        removeBtn.textContent = 'Remove';
-        removeBtn.title = 'Remove player';
-        removeBtn.addEventListener('click', () => {
-            players.splice(index, 1);
-            saveState();
-            renderPlayers();
-            renderHistory();
-        });
-
-        controlsDiv.appendChild(activeToggle);
-        controlsDiv.appendChild(removeBtn);
-        li.appendChild(nameSpan);
-        li.appendChild(controlsDiv);
-        playerListElement.appendChild(li);
-    });
-}
-
-// Render history table UI
-function renderHistory() {
-    historyTableBody.innerHTML = '';
-
-    const latestId = getLatestRoundId();
-
-    // Sort: date (dd-mm-yyyy) DESC, then time ASC
-    const sorted = history.slice().sort((a, b) => {
-        const aStart = new Date(a.start);
-        const bStart = new Date(b.start);
-
-        const aDateKey = dateKeyYYYYMMDD(aStart);
-        const bDateKey = dateKeyYYYYMMDD(bStart);
-
-        if (aDateKey !== bDateKey) return aDateKey < bDateKey ? 1 : -1; // date desc
-
-        const aMin = aStart.getHours() * 60 + aStart.getMinutes();
-        const bMin = bStart.getHours() * 60 + bStart.getMinutes();
-        if (aMin !== bMin) return aMin - bMin; // time asc
-
-        // tie-breaker
-        return (a.createdAt || 0) - (b.createdAt || 0);
-    });
-
-    sorted.forEach((round) => {
-        const row = document.createElement('tr');
-
-        const sessCell = document.createElement('td');
-        sessCell.textContent = String(round.session || 1);
-
-        const rndCell = document.createElement('td');
-        rndCell.textContent = String(round.roundInSession || 1);
-
-        const startDt = new Date(round.start);
-        const endDt = new Date(round.end);
-
-        const dateCell = document.createElement('td');
-        dateCell.textContent = formatDateDDMMYYYY(startDt);
-
-        const startCell = document.createElement('td');
-        startCell.textContent = formatTimeHHMM(startDt);
-
-        const endCell = document.createElement('td');
-        endCell.textContent = formatTimeHHMM(endDt);
-
-        const teamACell = document.createElement('td');
-        teamACell.textContent = round.teamA.join(' & ');
-
-        const teamBCell = document.createElement('td');
-        teamBCell.textContent = round.teamB.join(' & ');
-
-        const sitCell = document.createElement('td');
-        sitCell.textContent = round.satOut.join(', ');
-
-        const modeCell = document.createElement('td');
-        modeCell.textContent = round.mode || 'fun';
-
-        const actionCell = document.createElement('td');
-        if (round.id === latestId) {
-            const delBtn = document.createElement('button');
-            delBtn.textContent = 'Delete';
-            delBtn.title = 'Delete the most recently generated round';
-            delBtn.addEventListener('click', deleteLatestRound);
-            actionCell.appendChild(delBtn);
-        } else {
-            actionCell.textContent = '';
-        }
-
-        row.appendChild(sessCell);
-        row.appendChild(rndCell);
-        row.appendChild(dateCell);
-        row.appendChild(startCell);
-        row.appendChild(endCell);
-        row.appendChild(teamACell);
-        row.appendChild(teamBCell);
-        row.appendChild(sitCell);
-        row.appendChild(modeCell);
-        row.appendChild(actionCell);
-        historyTableBody.appendChild(row);
-    });
-}
-
-// Add new player
-function addPlayer() {
-    const name = playerNameInput.value.trim();
-    if (!name) return;
-
-    // Prevent duplicates
-    if (players.some(p => p.name.toLowerCase() === name.toLowerCase())) {
-        alert('Player already exists.');
-        return;
-    }
-    players.push({name: name, games: 0, sitouts: 0, active: true});
-    playerNameInput.value = '';
-    saveState();
+function removePlayer(p){
+    players = players.filter(x=>x!==p);
+    save();
     renderPlayers();
 }
 
-// Shuffle array for random selection
-function shuffleArray(array) {
-    for (let i = array.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [array[i], array[j]] = [array[j], array[i]];
-    }
+function fmtTime(d){return d.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}
+function fmtDate(d){return d.toLocaleDateString("en-GB")}
+function combineToday(hm){
+    const [h,m]=hm.split(":");
+    const d=new Date(); d.setHours(h,m,0,0); return d;
 }
-
-// Generate next round schedule
-function generateNextRound() {
-    const activePlayers = players.filter(p => p.active);
-    if (activePlayers.length < 4) {
-        alert('Need at least 4 active players to generate a round.');
-        return;
-    }
-
-    // Capture & persist the specific prefs requested
-    prefs.startTime = startTimeInput.value || prefs.startTime || defaultStartTimeHHMM();
-    prefs.gameDuration = parseInt(gameDurationInput.value, 10) || prefs.gameDuration || 20;
-    prefs.changeoverDuration = parseInt(changeoverDurationInput.value, 10);
-    if (!Number.isFinite(prefs.changeoverDuration)) prefs.changeoverDuration = 5;
-    prefs.randomMode = document.querySelector('input[name="randomMode"]:checked').value;
-    savePrefs();
-
-    const mode = prefs.randomMode;
-
-    let selectedPlayers = [];
-    let satOutPlayers = [];
-
-    if (activePlayers.length === 4) {
-        selectedPlayers = activePlayers.slice();
-    } else {
-        // Sort players by games played (ascending) and sitouts (ascending)
-        const sorted = activePlayers.slice().sort((a,b) => {
-            if (a.games !== b.games) return a.games - b.games;
-            if (a.sitouts !== b.sitouts) return a.sitouts - b.sitouts;
-            return Math.random() - 0.5;
-        });
-        // Determine how many players will actually play (multiple of 4)
-        const groupSize = 4;
-        const numPlayers = Math.floor(sorted.length / groupSize) * groupSize;
-        selectedPlayers = sorted.slice(0, numPlayers);
-        satOutPlayers = sorted.slice(numPlayers);
-    }
-
-    // For one court, only 4 players play at a time
-    let roundPlayers;
-    if (selectedPlayers.length > 4) {
-        roundPlayers = selectedPlayers.slice(0, 4);
-        satOutPlayers = satOutPlayers.concat(selectedPlayers.slice(4));
-    } else {
-        roundPlayers = selectedPlayers;
-    }
-
-    // Determine team assignment
-    let teamAssignment;
-    if (mode === 'fair') {
-        teamAssignment = chooseFairTeams(roundPlayers);
-    } else {
-        // Fun random: shuffle and split
-        const arr = roundPlayers.slice();
-        shuffleArray(arr);
-        teamAssignment = {
-            teamA: [arr[0].name, arr[1].name],
-            teamB: [arr[2].name, arr[3].name]
-        };
-    }
-
-    // Compute start/end/session
-    const schedule = computeNextStartEndAndSession(prefs.startTime, prefs.gameDuration, prefs.changeoverDuration);
-    const startTime = schedule.start;
-    const endTime = schedule.end; // end of GAME (changeover affects next start)
-    const session = schedule.session;
-
-    // Determine round number in session
-    const roundInSession = nextRoundInSession(session);
-
-    // Update player statistics
-    roundPlayers.forEach(p => {
-        const obj = players.find(pl => pl.name === p.name);
-        if (obj) obj.games = (obj.games || 0) + 1;
-    });
-    satOutPlayers.forEach(p => {
-        const obj = players.find(pl => pl.name === p.name);
-        if (obj) obj.sitouts = (obj.sitouts || 0) + 1;
-    });
-
-    // Update history
-    history.push({
-        id: cryptoRandomId(),
-        createdAt: Date.now(),
-        session: session,
-        roundInSession: roundInSession,
-        start: startTime.toISOString(),
-        end: endTime.toISOString(),
-        teamA: teamAssignment.teamA,
-        teamB: teamAssignment.teamB,
-        satOut: satOutPlayers.map(p => p.name),
-        mode: mode
-    });
-
-    // Update lastRound times/session
-    currentSession = session;
-    lastRoundStart = startTime;
-    lastRoundEnd = endTime;
-
-    // Persist and re-render
-    saveState();
-    renderPlayers();
-    renderHistory();
-    displayCurrentRound(teamAssignment, startTime, endTime, satOutPlayers, mode, session, roundInSession);
+function next5Min(){
+    const d=new Date(); d.setMinutes(Math.ceil(d.getMinutes()/5)*5,0,0);
+    return fmtTime(d);
 }
-
-// Compute next start/end and session rules:
-// - If no prior rounds: start = today @ startTime
-// - Else: start = lastEnd + changeover
-// - If "time out of sequence" (today@startTime <= lastStart) OR day changed (today != lastStart day): increment session and start at today@startTime
-function computeNextStartEndAndSession(startHHMM, gameMins, changeoverMins) {
-    const baseStart = combineTodayWithTime(startHHMM);
-
-    if (!lastRoundStart || !lastRoundEnd || history.length === 0) {
-        return {
-            session: 1,
-            start: new Date(baseStart.getTime()),
-            end: new Date(baseStart.getTime() + gameMins*60*1000)
-        };
-    }
-
-    const lastStart = new Date(lastRoundStart.getTime());
-    const lastEnd = new Date(lastRoundEnd.getTime());
-
-    const dayChanged = dateKeyYYYYMMDD(baseStart) !== dateKeyYYYYMMDD(lastStart);
-    const timeOutOfSequence = baseStart.getTime() <= lastStart.getTime();
-
-    if (dayChanged || timeOutOfSequence) {
-        const nextSession = (currentSession || 1) + 1;
-        // Reset fairness counters for the new session (sit-out rotation starts fresh)
-        resetPlayerStats();
-        return {
-            session: nextSession,
-            start: new Date(baseStart.getTime()),
-            end: new Date(baseStart.getTime() + gameMins*60*1000)
-        };
-    }
-
-    const start = new Date(lastEnd.getTime() + changeoverMins*60*1000);
-    return {
-        session: currentSession || 1,
-        start: start,
-        end: new Date(start.getTime() + gameMins*60*1000)
-    };
-}
-
-function nextRoundInSession(session) {
-    const max = history.reduce((m, r) => {
-        if ((r.session || 1) !== session) return m;
-        return Math.max(m, r.roundInSession || 1);
-    }, 0);
-    return max + 1;
-}
-
-// Choose fair teams by minimizing repeat partners/opponents (within current session)
-function chooseFairTeams(roundPlayers) {
-    const partnerCount = {};
-    const opponentCount = {};
-
-    function incPairCount(map, a, b) {
-        const key = a < b ? a + '__' + b : b + '__' + a;
-        map[key] = (map[key] || 0) + 1;
-    }
-
-    // only consider current session history
-    history.filter(r => (r.session || 1) === (currentSession || 1)).forEach(r => {
-        if (r.teamA && r.teamB) {
-            incPairCount(partnerCount, r.teamA[0], r.teamA[1]);
-            incPairCount(partnerCount, r.teamB[0], r.teamB[1]);
-            r.teamA.forEach(a => {
-                r.teamB.forEach(b => {
-                    incPairCount(opponentCount, a, b);
-                });
-            });
-        }
-    });
-
-    function getPairCount(map, a, b) {
-        const key = a < b ? a + '__' + b : b + '__' + a;
-        return map[key] || 0;
-    }
-
-    const names = roundPlayers.map(p => p.name);
-    const combinations = [
-        {teamA: [names[0], names[1]], teamB: [names[2], names[3]]},
-        {teamA: [names[0], names[2]], teamB: [names[1], names[3]]},
-        {teamA: [names[0], names[3]], teamB: [names[1], names[2]]}
-    ];
-
-    let minPenalty = Infinity;
-    let bestComb = combinations[0];
-
-    combinations.forEach(comb => {
-        let penalty = 0;
-        // Partner penalty weighted heavier
-        penalty += getPairCount(partnerCount, comb.teamA[0], comb.teamA[1]) * 3;
-        penalty += getPairCount(partnerCount, comb.teamB[0], comb.teamB[1]) * 3;
-        // Opponent penalty
-        comb.teamA.forEach(a => {
-            comb.teamB.forEach(b => {
-                penalty += getPairCount(opponentCount, a, b);
-            });
-        });
-        if (penalty < minPenalty) {
-            minPenalty = penalty;
-            bestComb = comb;
-        } else if (penalty === minPenalty && Math.random() < 0.5) {
-            bestComb = comb;
-        }
-    });
-
-    return bestComb;
-}
-
-// Display current round information
-function displayCurrentRound(assignment, startTime, endTime, satPlayers, mode, session, roundInSession) {
-    currentRoundDiv.style.display = 'block';
-    currentRoundDiv.innerHTML = '';
-
-    const h3 = document.createElement('h3');
-    h3.textContent = 'Current Round (Session ' + session + ', Round ' + roundInSession + ')';
-    currentRoundDiv.appendChild(h3);
-
-    const pTime = document.createElement('p');
-    pTime.textContent = 'Date: ' + formatDateDDMMYYYY(startTime) +
-        ' | Start: ' + formatTimeHHMM(startTime) +
-        ' | End: ' + formatTimeHHMM(endTime);
-    currentRoundDiv.appendChild(pTime);
-
-    const pTeamA = document.createElement('p');
-    pTeamA.innerHTML = '<strong>Team A:</strong> ' + assignment.teamA.join(' & ');
-    currentRoundDiv.appendChild(pTeamA);
-
-    const pTeamB = document.createElement('p');
-    pTeamB.innerHTML = '<strong>Team B:</strong> ' + assignment.teamB.join(' & ');
-    currentRoundDiv.appendChild(pTeamB);
-
-    if (satPlayers.length > 0) {
-        const pSit = document.createElement('p');
-        pSit.innerHTML = '<strong>Sat Out:</strong> ' + satPlayers.map(p => p.name).join(', ');
-        currentRoundDiv.appendChild(pSit);
-    }
-
-    const pMode = document.createElement('p');
-    pMode.innerHTML = '<strong>Mode:</strong> ' + (mode === 'fair' ? 'Fair random' : 'Fun random');
-    currentRoundDiv.appendChild(pMode);
-
-    const pNext = document.createElement('p');
-    pNext.style.opacity = '0.85';
-    pNext.textContent = 'Next round will start at: ' + formatTimeHHMM(new Date(endTime.getTime() + prefs.changeoverDuration*60*1000)) +
-        ' (after ' + prefs.changeoverDuration + ' min changeover)';
-    currentRoundDiv.appendChild(pNext);
-}
-
-// Delete the most recently generated round (only last-by-createdAt)
-function deleteLatestRound() {
-    const latest = getLatestRound();
-    if (!latest) return;
-
-    history = history.filter(r => r.id !== latest.id);
-    saveState();
-
-    // Update lastRound times/session based on new latest
-    if (history.length === 0) {
-        lastRoundStart = null;
-        lastRoundEnd = null;
-        currentSession = 1;
-        currentRoundDiv.style.display = 'none';
-        currentRoundDiv.innerHTML = '';
-    } else {
-        const newLatest = getLatestRound();
-        currentSession = newLatest.session || 1;
-        lastRoundStart = new Date(newLatest.start);
-        lastRoundEnd = new Date(newLatest.end);
-    }
-
-    recomputePlayerStatsFromHistory();
-    renderPlayers();
-    renderHistory();
-}
-
-// ---------- Helpers ----------
-
-function cryptoRandomId() {
-    try {
-        return (crypto && crypto.randomUUID) ? crypto.randomUUID() : ('id_' + Math.random().toString(16).slice(2) + Date.now());
-    } catch (e) {
-        return 'id_' + Math.random().toString(16).slice(2) + Date.now();
-    }
-}
-
-function getLatestRound() {
-    if (history.length === 0) return null;
-    return history.reduce((acc, r) => ((r.createdAt || 0) > (acc.createdAt || 0) ? r : acc), history[0]);
-}
-
-function getLatestRoundId() {
-    const latest = getLatestRound();
-    return latest ? latest.id : null;
-}
-
-function formatDateDDMMYYYY(d) {
-    const dd = String(d.getDate()).padStart(2, '0');
-    const mm = String(d.getMonth() + 1).padStart(2, '0');
-    const yyyy = String(d.getFullYear());
-    return dd + '-' + mm + '-' + yyyy;
-}
-
-function formatTimeHHMM(d) {
-    const hh = String(d.getHours()).padStart(2, '0');
-    const mm = String(d.getMinutes()).padStart(2, '0');
-    return hh + ':' + mm;
-}
-
-function dateKeyYYYYMMDD(d) {
-    const yyyy = String(d.getFullYear());
-    const mm = String(d.getMonth() + 1).padStart(2, '0');
-    const dd = String(d.getDate()).padStart(2, '0');
-    return yyyy + '-' + mm + '-' + dd;
-}
-
-function parseHHMM(hhmm) {
-    const m = /^([0-1]?\d|2[0-3]):([0-5]\d)$/.exec(hhmm || '');
-    if (!m) return null;
-    return {h: parseInt(m[1], 10), m: parseInt(m[2], 10)};
-}
-
-function combineTodayWithTime(hhmm) {
-    const t = parseHHMM(hhmm);
-    const d = new Date();
-    d.setSeconds(0, 0);
-    if (!t) return d;
-    d.setHours(t.h, t.m, 0, 0);
-    return d;
-}
-
-function defaultStartTimeHHMM() {
-    const d = new Date();
-    d.setSeconds(0, 0);
-    // round up to next 5 minutes
-    const mins = d.getMinutes();
-    const rounded = Math.ceil(mins / 5) * 5;
-    d.setMinutes(rounded);
-    return formatTimeHHMM(d);
-}
-
-function resetPlayerStats() {
-    players.forEach(p => {
-        p.games = 0;
-        p.sitouts = 0;
-    });
-}
-
-function recomputePlayerStatsFromHistory() {
-    resetPlayerStats();
-    if (history.length === 0) return;
-
-    // Replay history in createdAt order; reset stats when session changes
-    const rounds = history.slice().sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
-    let sess = rounds[0].session || 1;
-    resetPlayerStats();
-
-    rounds.forEach(r => {
-        const s = r.session || 1;
-        if (s !== sess) {
-            sess = s;
-            resetPlayerStats();
-        }
-        const inRound = [].concat(r.teamA || [], r.teamB || []);
-        inRound.forEach(name => {
-            const obj = players.find(pl => pl.name === name);
-            if (obj) obj.games = (obj.games || 0) + 1;
-        });
-        (r.satOut || []).forEach(name => {
-            const obj = players.find(pl => pl.name === name);
-            if (obj) obj.sitouts = (obj.sitouts || 0) + 1;
-        });
-    });
-}
-
-// Event listeners
-addPlayerBtn.addEventListener('click', addPlayer);
-playerNameInput.addEventListener('keyup', (e) => {
-    if (e.key === 'Enter') addPlayer();
-});
-generateRoundBtn.addEventListener('click', generateNextRound);
-
-// Persisted preference listeners (only the requested fields)
-startTimeInput.addEventListener('change', () => {
-    prefs.startTime = startTimeInput.value || prefs.startTime;
-    savePrefs();
-});
-gameDurationInput.addEventListener('change', () => {
-    const v = parseInt(gameDurationInput.value, 10);
-    if (Number.isFinite(v) && v > 0) {
-        prefs.gameDuration = v;
-        savePrefs();
-    }
-});
-changeoverDurationInput.addEventListener('change', () => {
-    const v = parseInt(changeoverDurationInput.value, 10);
-    if (Number.isFinite(v) && v >= 0) {
-        prefs.changeoverDuration = v;
-        savePrefs();
-    }
-});
-document.querySelectorAll('input[name="randomMode"]').forEach(r => {
-    r.addEventListener('change', () => {
-        prefs.randomMode = document.querySelector('input[name="randomMode"]:checked').value;
-        savePrefs();
-    });
-});
-
-// Initialize state on page load
-loadState();
-renderPlayers();
-renderHistory();
-})();
 </script>
 </body>
 </html>
