@@ -170,6 +170,36 @@ button {
     .session-sep td { border-top-color: #eee !important; }
     .session-label td { background: rgba(255,255,255,0.06); }
 }
+
+.scores-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 8px;
+}
+.scores-table th, .scores-table td {
+  padding: 6px 8px;
+  border: 1px solid #ccc;
+}
+.scores-table th { background: #eee; }
+.score-actions button {
+  margin-top: 0;
+  padding: 6px 10px;
+  font-size: 13px;
+}
+.score-chip {
+  display: inline-block;
+  padding: 2px 8px;
+  border: 1px solid #999;
+  border-radius: 999px;
+  font-size: 12px;
+  opacity: 0.9;
+}
+@media (prefers-color-scheme: dark) {
+  .scores-table th { background: #333; }
+  .scores-table td, .scores-table th { border-color: #444; }
+  .score-chip { border-color: #aaa; }
+}
+
 </style>
 </head>
 <body>
@@ -239,21 +269,29 @@ button {
 
   <table class="history-table" id="historyTable">
     <thead>
-      <tr>
-        <th>Session</th>
-        <th>Round</th>
-        <th>Date</th>
-        <th>Start</th>
-        <th>End</th>
-        <th>Team A</th>
-        <th>Team B</th>
-        <th>Sat Out</th>
-        <th>Mode</th>
-        <th>Action</th>
-      </tr>
+    <tr>
+      <th>Session</th>
+      <th>Round</th>
+      <th>Date</th>
+      <th>Start</th>
+      <th>End</th>
+      <th>Team A</th>
+      <th>Team A Score</th>
+      <th>Team B</th>
+      <th>Team B Score</th>
+      <th>Sat Out</th>
+      <th>Mode</th>
+      <th>Action</th>
+    </tr>
     </thead>
     <tbody></tbody>
   </table>
+  <div id="scoresSection" class="section" style="margin-top:12px;">
+      <h3 style="margin:0 0 10px 0;">Scores</h3>
+      <div class="hint">Scores are shown per session (and grand total at the bottom).</div>
+      <div id="scoresContent" style="margin-top:10px;"></div>
+  </div>
+
 </div>
 
 </div>
@@ -270,6 +308,8 @@ document.getElementById('buildInfo').textContent = "Build: " + BUILD_VERSION;
  *  DOM references
  *  ========================= */
 const sessionWindowInfo = document.getElementById('sessionWindowInfo');
+
+const scoresContent = document.getElementById('scoresContent');
 
 const playerListElement = document.getElementById('playerList');
 const historyTableBody = document.getElementById('historyTable').querySelector('tbody');
@@ -381,12 +421,17 @@ function loadState() {
   });
 
   // Ensure rounds have required properties
-  history.forEach(r => {
-    if (!r.createdAt) r.createdAt = Date.now();
-    if (!r.id) r.id = cryptoRandomId();
-    if (!r.session) r.session = 1;
-    if (!r.roundInSession) r.roundInSession = 1;
-  });
+history.forEach(r => {
+  if (!r.createdAt) r.createdAt = Date.now();
+  if (!r.id) r.id = cryptoRandomId();
+  if (!r.session) r.session = 1;
+  if (!r.roundInSession) r.roundInSession = 1;
+
+  // NEW: scores per round (default 0-0)
+  if (!Number.isFinite(r.scoreA)) r.scoreA = 0;
+  if (!Number.isFinite(r.scoreB)) r.scoreB = 0;
+});
+
 
   // Determine last round times / session if any
   if (history.length > 0) {
@@ -428,72 +473,187 @@ function loadState() {
  *  Render players
  *  ========================= */
 function renderPlayers() {
-  playerListElement.innerHTML = '';
-  players.forEach((player, index) => {
-    const li = document.createElement('li');
-    li.className = 'player-item';
+      playerListElement.innerHTML = '';
+      players.forEach((player, index) => {
+        const li = document.createElement('li');
+        li.className = 'player-item';
 
-    const nameSpan = document.createElement('span');
-    nameSpan.textContent = player.name + (player.active ? '' : ' (inactive)');
-    if (!player.active) nameSpan.style.opacity = '0.5';
+        const nameSpan = document.createElement('span');
+        nameSpan.textContent = player.name + (player.active ? '' : ' (inactive)');
+        if (!player.active) nameSpan.style.opacity = '0.5';
 
-    const controlsDiv = document.createElement('div');
+        const controlsDiv = document.createElement('div');
 
-    const activeToggle = document.createElement('input');
-    activeToggle.type = 'checkbox';
-    activeToggle.checked = player.active;
-    activeToggle.title = 'Toggle player active status';
-    activeToggle.addEventListener('change', () => {
-      player.active = activeToggle.checked;
-      saveState();
-      renderPlayers();
-    });
+        const activeToggle = document.createElement('input');
+        activeToggle.type = 'checkbox';
+        activeToggle.checked = player.active;
+        activeToggle.title = 'Toggle player active status';
+        activeToggle.addEventListener('change', () => {
+          player.active = activeToggle.checked;
+          saveState();
+          renderPlayers();
+        });
 
-    const removeBtn = document.createElement('button');
-    removeBtn.textContent = 'Remove';
-    removeBtn.title = 'Remove player';
-    removeBtn.addEventListener('click', () => {
-      players.splice(index, 1);
-      saveState();
-      renderPlayers();
-      renderHistory();
-    });
+        const removeBtn = document.createElement('button');
+        removeBtn.textContent = 'Remove';
+        removeBtn.title = 'Remove player';
+        removeBtn.addEventListener('click', () => {
+          players.splice(index, 1);
+          saveState();
+          renderPlayers();
+          renderHistory();
+        });
 
-    controlsDiv.appendChild(activeToggle);
-    controlsDiv.appendChild(removeBtn);
+        controlsDiv.appendChild(activeToggle);
+        controlsDiv.appendChild(removeBtn);
 
-    li.appendChild(nameSpan);
-    li.appendChild(controlsDiv);
-    playerListElement.appendChild(li);
-  });
-}
-
-function getSessionThatContains(desiredStartDateTime, changeoverMinsOverride) {
-  // Use current UI changeover value if provided, otherwise prefs
-  const changeoverMins = Number.isFinite(changeoverMinsOverride)
-    ? changeoverMinsOverride
-    : (prefs.changeoverDuration || 0);
-
-  // Build session set
-  const sessions = new Set(history.map(r => r.session || 1));
-
-  for (const sess of sessions) {
-    const bounds = getSessionBounds(sess);
-    if (!bounds) continue;
-
-    const start = bounds.minStart;
-    const endPlus = new Date(bounds.maxEnd.getTime() + changeoverMins * 60 * 1000);
-
-    const t = desiredStartDateTime.getTime();
-
-    // IMPORTANT: inclusive window block
-    // If user chooses EXACTLY start or EXACTLY end+changeover, we treat it as "inside" to prevent overlaps/duplicates.
-    if (t >= start.getTime() && t <= endPlus.getTime()) {
-      return { session: sess, start, endPlus };
+        li.appendChild(nameSpan);
+        li.appendChild(controlsDiv);
+        playerListElement.appendChild(li);
+      });
     }
-  }
-  return null;
-}
+
+    function addScore(roundId, team, delta) {
+      const r = history.find(x => x.id === roundId);
+      if (!r) return;
+
+      if (!Number.isFinite(r.scoreA)) r.scoreA = 0;
+      if (!Number.isFinite(r.scoreB)) r.scoreB = 0;
+
+      if (team === 'A') r.scoreA = Math.max(0, r.scoreA + delta);
+      if (team === 'B') r.scoreB = Math.max(0, r.scoreB + delta);
+
+      saveState();
+      renderHistory(); // calls renderScores() at the end
+    }
+
+    function resetRoundScore(roundId) {
+      const r = history.find(x => x.id === roundId);
+      if (!r) return;
+      r.scoreA = 0;
+      r.scoreB = 0;
+      saveState();
+      renderHistory();
+    }
+
+    function renderScores() {
+      if (!scoresContent) return;
+
+      if (!history.length) {
+        scoresContent.innerHTML = '<div class="hint">No scores yet.</div>';
+        return;
+      }
+
+      // session -> { playerName -> points }
+      const perSession = {};
+      const grand = {};
+
+      function inc(map, name, pts) {
+        map[name] = (map[name] || 0) + pts;
+      }
+
+      // Build from rounds
+      history.forEach(r => {
+        const s = r.session || 1;
+        if (!perSession[s]) perSession[s] = {};
+
+        const aPts = Number.isFinite(r.scoreA) ? r.scoreA : 0;
+        const bPts = Number.isFinite(r.scoreB) ? r.scoreB : 0;
+
+        const teamA = r.teamA || [];
+        const teamB = r.teamB || [];
+
+        teamA.forEach(name => {
+          inc(perSession[s], name, aPts);
+          inc(grand, name, aPts);
+        });
+        teamB.forEach(name => {
+          inc(perSession[s], name, bPts);
+          inc(grand, name, bPts);
+        });
+      });
+
+      // Sort sessions ascending
+      const sessions = Object.keys(perSession).map(n => parseInt(n, 10)).sort((a,b) => a-b);
+
+      const parts = [];
+
+      sessions.forEach(sess => {
+        const map = perSession[sess];
+
+        // list players that appear in this session
+        const playersInSession = Object.keys(map).sort((a,b) => (map[b]-map[a]) || a.localeCompare(b));
+
+        parts.push(`<div style="margin-top:12px;"><strong>Session ${sess}</strong></div>`);
+        parts.push(`<table class="scores-table">
+          <thead><tr><th>Player</th><th>Points</th></tr></thead><tbody>
+        `);
+
+        let sessionTotal = 0;
+        playersInSession.forEach(name => {
+          const pts = map[name] || 0;
+          sessionTotal += pts;
+          parts.push(`<tr><td>${escapeHtml(name)}</td><td>${pts}</td></tr>`);
+        });
+
+        parts.push(`<tr><th>Total</th><th>${sessionTotal}</th></tr>`);
+        parts.push(`</tbody></table>`);
+      });
+
+      // Grand total table
+      const grandPlayers = Object.keys(grand).sort((a,b) => (grand[b]-grand[a]) || a.localeCompare(b));
+      parts.push(`<div style="margin-top:16px;"><strong>Grand total</strong></div>`);
+      parts.push(`<table class="scores-table">
+        <thead><tr><th>Player</th><th>Points</th></tr></thead><tbody>
+      `);
+
+      let grandTotal = 0;
+      grandPlayers.forEach(name => {
+        const pts = grand[name] || 0;
+        grandTotal += pts;
+        parts.push(`<tr><td>${escapeHtml(name)}</td><td>${pts}</td></tr>`);
+      });
+      parts.push(`<tr><th>Total</th><th>${grandTotal}</th></tr>`);
+      parts.push(`</tbody></table>`);
+
+      scoresContent.innerHTML = parts.join('');
+    }
+
+    function escapeHtml(s) {
+      return String(s ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
+
+    function getSessionThatContains(desiredStartDateTime, changeoverMinsOverride) {
+      // Use current UI changeover value if provided, otherwise prefs
+      const changeoverMins = Number.isFinite(changeoverMinsOverride)
+        ? changeoverMinsOverride
+        : (prefs.changeoverDuration || 0);
+
+      // Build session set
+      const sessions = new Set(history.map(r => r.session || 1));
+
+      for (const sess of sessions) {
+        const bounds = getSessionBounds(sess);
+        if (!bounds) continue;
+
+        const start = bounds.minStart;
+        const endPlus = new Date(bounds.maxEnd.getTime() + changeoverMins * 60 * 1000);
+
+        const t = desiredStartDateTime.getTime();
+
+        // IMPORTANT: inclusive window block
+        // If user chooses EXACTLY start or EXACTLY end+changeover, we treat it as "inside" to prevent overlaps/duplicates.
+        if (t >= start.getTime() && t <= endPlus.getTime()) {
+          return { session: sess, start, endPlus };
+        }
+      }
+      return null;
+    }
 
 
 
@@ -558,7 +718,7 @@ if (!history.length) {
       const sep = document.createElement('tr');
       sep.className = 'session-sep';
       const td = document.createElement('td');
-      td.colSpan = 10;
+      td.colSpan = 12;
       sep.appendChild(td);
       historyTableBody.appendChild(sep);
 
@@ -594,8 +754,14 @@ if (!history.length) {
     const teamACell = document.createElement('td');
     teamACell.textContent = (round.teamA || []).join(' & ');
 
+    const scoreACell = document.createElement('td');
+    scoreACell.innerHTML = `<span class="score-chip">${round.scoreA ?? 0}</span>`;
+
     const teamBCell = document.createElement('td');
     teamBCell.textContent = (round.teamB || []).join(' & ');
+
+    const scoreBCell = document.createElement('td');
+    scoreBCell.innerHTML = `<span class="score-chip">${round.scoreB ?? 0}</span>`;
 
     const sitCell = document.createElement('td');
     sitCell.textContent = (round.satOut || []).join(', ');
@@ -604,29 +770,56 @@ if (!history.length) {
     modeCell.textContent = round.mode || 'fun';
 
     const actionCell = document.createElement('td');
+    actionCell.className = 'score-actions';
+
+    // NEW: score buttons (available for every round)
+    const aPlus = document.createElement('button');
+    aPlus.textContent = 'A +1';
+    aPlus.title = 'Add 1 point to Team A (both players)';
+    aPlus.addEventListener('click', () => addScore(round.id, 'A', +1));
+
+    const bPlus = document.createElement('button');
+    bPlus.textContent = 'B +1';
+    bPlus.title = 'Add 1 point to Team B (both players)';
+    bPlus.addEventListener('click', () => addScore(round.id, 'B', +1));
+
+    const resetBtn = document.createElement('button');
+    resetBtn.textContent = 'Reset';
+    resetBtn.title = 'Reset this round score to 0-0';
+    resetBtn.addEventListener('click', () => resetRoundScore(round.id));
+
+    actionCell.appendChild(aPlus);
+    actionCell.appendChild(bPlus);
+    actionCell.appendChild(resetBtn);
+
+    // Keep your "Delete latest round" button too (optional)
+    // If you want to keep it, add it after the score buttons:
     if (round.id === latestId) {
       const delBtn = document.createElement('button');
       delBtn.textContent = 'Delete';
       delBtn.title = 'Delete the most recently generated round';
       delBtn.addEventListener('click', deleteLatestRound);
       actionCell.appendChild(delBtn);
-    } else {
-      actionCell.textContent = '';
     }
 
-    row.appendChild(sessCell);
-    row.appendChild(rndCell);
-    row.appendChild(dateCell);
-    row.appendChild(startCell);
-    row.appendChild(endCell);
-    row.appendChild(teamACell);
-    row.appendChild(teamBCell);
-    row.appendChild(sitCell);
-    row.appendChild(modeCell);
-    row.appendChild(actionCell);
 
-    historyTableBody.appendChild(row);
-  });
+        row.appendChild(sessCell);
+        row.appendChild(rndCell);
+        row.appendChild(dateCell);
+        row.appendChild(startCell);
+        row.appendChild(endCell);
+        row.appendChild(teamACell);
+        row.appendChild(scoreACell);
+        row.appendChild(teamBCell);
+        row.appendChild(scoreBCell);
+        row.appendChild(sitCell);
+        row.appendChild(modeCell);
+        row.appendChild(actionCell);
+
+        historyTableBody.appendChild(row);
+      });
+
+      renderScores();
 }
 
 function makeSessionLabelRow(sessionNumber) {
