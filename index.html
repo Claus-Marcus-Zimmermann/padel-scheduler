@@ -221,7 +221,7 @@ button {
 <!-- Schedules -->
 <div class="section" id="history-section">
   <h2>Schedules</h2>
-
+  <div id="sessionWindowInfo" class="build-info"></div>
   <div class="schedules-actions">
     <div class="left">
       <button id="generateRoundBtn">Generate Next Round</button>
@@ -230,7 +230,7 @@ button {
       <button id="exportJsonBtn" title="Export all data (players + schedules + settings) as JSON">Export JSON</button>
       <button id="importJsonBtn" title="Import previously exported JSON">Import JSON</button>
       <input type="file" id="importJsonFile" accept="application/json">
-      <button id="clearAllBtn" title="Clear all local data (players, schedules, settings)">Clear all data</button>
+      <button id="clearAllBtn" title="Clear schedules only (players and settings stay)">Clear schedules</button>
     </div>
     <div class="hint">
       Tip: if you change the date/time and it jumps backwards or forwards past the expected next start, a <strong>new session</strong> will be created.
@@ -269,6 +269,8 @@ document.getElementById('buildInfo').textContent = "Build: " + BUILD_VERSION;
 /** =========================
  *  DOM references
  *  ========================= */
+const sessionWindowInfo = document.getElementById('sessionWindowInfo');
+
 const playerListElement = document.getElementById('playerList');
 const historyTableBody = document.getElementById('historyTable').querySelector('tbody');
 
@@ -466,6 +468,35 @@ function renderPlayers() {
   });
 }
 
+function getSessionThatContains(desiredStartDateTime, changeoverMinsOverride) {
+  // Use current UI changeover value if provided, otherwise prefs
+  const changeoverMins = Number.isFinite(changeoverMinsOverride)
+    ? changeoverMinsOverride
+    : (prefs.changeoverDuration || 0);
+
+  // Build session set
+  const sessions = new Set(history.map(r => r.session || 1));
+
+  for (const sess of sessions) {
+    const bounds = getSessionBounds(sess);
+    if (!bounds) continue;
+
+    const start = bounds.minStart;
+    const endPlus = new Date(bounds.maxEnd.getTime() + changeoverMins * 60 * 1000);
+
+    const t = desiredStartDateTime.getTime();
+
+    // IMPORTANT: inclusive window block
+    // If user chooses EXACTLY start or EXACTLY end+changeover, we treat it as "inside" to prevent overlaps/duplicates.
+    if (t >= start.getTime() && t <= endPlus.getTime()) {
+      return { session: sess, start, endPlus };
+    }
+  }
+  return null;
+}
+
+
+
 /** =========================
  *  Sorting helper used by render + exports
  *  ========================= */
@@ -494,6 +525,25 @@ function getSortedRoundsForDisplay() {
  *  ========================= */
 function renderHistory() {
   historyTableBody.innerHTML = '';
+
+// Show current session window (start → end+changeover)
+if (!history.length) {
+  sessionWindowInfo.textContent = 'Current session window: (none)';
+} else {
+  const bounds = getSessionBounds(currentSession || 1);
+  if (!bounds) {
+    sessionWindowInfo.textContent = 'Current session window: (unknown)';
+  } else {
+    const endPlus = new Date(bounds.maxEnd.getTime() + (prefs.changeoverDuration || 0) * 60 * 1000);
+    sessionWindowInfo.textContent =
+      'Current session window: ' +
+      formatDateDDMMYYYY(bounds.minStart) + ' ' + formatTimeHHMM(bounds.minStart) +
+      ' \u2192 ' +
+      formatTimeHHMM(endPlus) + ' (end+changeover)';
+  }
+}
+
+
   const latestId = getLatestRoundId();
 
   const sorted = getSortedRoundsForDisplay();
@@ -967,9 +1017,48 @@ function deleteLatestRound() {
  *  Suggestions: New Session / Export+Import JSON / Clear All / Export CSV
  *  ========================= */
 function startNewSessionNow() {
+  // Read UI values (NOT prefs) so validation is always correct
+  const inputStartDate = startDateInput.value || prefs.startDate || dateKeyYYYYMMDD(new Date());
+  const inputStartTime = startTimeInput.value || prefs.startTime || defaultStartTimeHHMM();
+
+  const desiredStart = combineDateAndTime(inputStartDate, inputStartTime);
+
+  // Use *current* changeover input for the window check
+  let changeoverMins = parseInt(changeoverDurationInput.value, 10);
+  if (!Number.isFinite(changeoverMins) || changeoverMins < 0) changeoverMins = (prefs.changeoverDuration || 0);
+
+  // Block if the chosen time lands inside ANY session window (inclusive)
+  const hit = getSessionThatContains(desiredStart, changeoverMins);
+  if (hit) {
+    alert(
+      "New Session blocked.\n\n" +
+      "That start time is inside an existing session window.\n\n" +
+      "Session " + hit.session + " window:\n" +
+      formatDateDDMMYYYY(hit.start) + " " + formatTimeHHMM(hit.start) +
+      " \u2192 " +
+      formatDateDDMMYYYY(hit.endPlus) + " " + formatTimeHHMM(hit.endPlus) +
+      " (end + changeover)\n\n" +
+      "Pick a start time BEFORE this window, or AFTER it."
+    );
+    return;
+  }
+
+  // Persist settings now (so the forced session uses what the user sees)
+  prefs.startDate = inputStartDate;
+  prefs.startTime = inputStartTime;
+
+  const gd = parseInt(gameDurationInput.value, 10);
+  if (Number.isFinite(gd) && gd > 0) prefs.gameDuration = gd;
+
+  prefs.changeoverDuration = changeoverMins;
+  prefs.randomMode = document.querySelector('input[name="randomMode"]:checked').value;
+  savePrefs();
+
+  // Force a new session and generate the first round in that new session
   forceNewSessionStart = true;
   generateNextRound();
 }
+
 
 function exportAllToJson() {
   const payload = {
@@ -1029,46 +1118,33 @@ function importAllFromJsonFile(file) {
   reader.readAsText(file);
 }
 
-function clearAllData() {
-  const ok = confirm("This will delete ALL local data (players, schedules, settings). Continue?");
+function clearSchedulesOnly() {
+  const ok = confirm("This will delete ALL schedules only. Players and settings will remain. Continue?");
   if (!ok) return;
 
-  localStorage.removeItem(KEY_PLAYERS);
+  // Remove schedules only
   localStorage.removeItem(KEY_HISTORY);
-  localStorage.removeItem(KEY_PREFS);
 
-  // Reset in-memory
-  players = [];
+  // Reset in-memory schedules + pointers
   history = [];
   lastRoundStart = null;
   lastRoundEnd = null;
   currentSession = 1;
   forceNewSessionStart = false;
 
-  // Reset prefs to defaults
-  prefs = {
-    startDate: dateKeyYYYYMMDD(new Date()),
-    startTime: defaultStartTimeHHMM(),
-    gameDuration: 20,
-    changeoverDuration: 5,
-    randomMode: 'fun',
-    sessionNumber: 1,
-    sessionDateKey: dateKeyYYYYMMDD(new Date()),
-    sessionStartTime: ''
-  };
-  prefs.sessionStartTime = prefs.startTime;
+  // Reset session metadata only (keep prefs/settings like date/time/durations/mode)
+  prefs.sessionNumber = 1;
+  prefs.sessionDateKey = prefs.startDate || dateKeyYYYYMMDD(new Date());
+  prefs.sessionStartTime = prefs.startTime || defaultStartTimeHHMM();
   savePrefs();
 
-  // Apply to UI
-  startDateInput.value = prefs.startDate;
-  startTimeInput.value = prefs.startTime;
-  gameDurationInput.value = String(prefs.gameDuration);
-  changeoverDurationInput.value = String(prefs.changeoverDuration);
-  document.querySelector('input[name="randomMode"][value="fun"]').checked = true;
+  // Recompute stats now that schedules are gone
+  recomputePlayerStatsFromHistory();
 
   renderPlayers();
   renderHistory();
 }
+
 
 function exportSchedulesToCsv() {
   const sorted = getSortedRoundsForDisplay();
@@ -1154,6 +1230,38 @@ function getMaxSessionNumber() {
   if (history.length === 0) return currentSession || 1;
   return history.reduce((m, r) => Math.max(m, r.session || 1), 1);
 }
+
+function getSessionBounds(sessionNumber) {
+  const rounds = history
+    .filter(r => (r.session || 1) === sessionNumber)
+    .slice();
+
+  if (rounds.length === 0) return null;
+
+  let minStart = new Date(rounds[0].start);
+  let maxEnd = new Date(rounds[0].end);
+
+  rounds.forEach(r => {
+    const s = new Date(r.start);
+    const e = new Date(r.end);
+    if (s.getTime() < minStart.getTime()) minStart = s;
+    if (e.getTime() > maxEnd.getTime()) maxEnd = e;
+  });
+
+  return { minStart, maxEnd };
+}
+
+function canCreateNewSessionAt(desiredStartDateTime) {
+  if (!history.length) return true;
+
+  let changeoverMins = parseInt(changeoverDurationInput.value, 10);
+  if (!Number.isFinite(changeoverMins) || changeoverMins < 0) changeoverMins = (prefs.changeoverDuration || 0);
+
+  return getSessionThatContains(desiredStartDateTime, changeoverMins) === null;
+}
+
+
+
 
 /** =========================
  *  Helpers
@@ -1281,7 +1389,8 @@ importJsonFile.addEventListener('change', () => {
   importJsonFile.value = ""; // allow re-import same file
 });
 
-clearAllBtn.addEventListener('click', clearAllData);
+clearAllBtn.addEventListener('click', clearSchedulesOnly);
+
 
 // Persisted preference listeners
 startDateInput.addEventListener('change', () => { prefs.startDate = startDateInput.value || prefs.startDate; savePrefs(); });
