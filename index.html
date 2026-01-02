@@ -152,8 +152,6 @@ button {
     font-size: 12px;
 }
 
-/* Hidden file input */
-#importJsonFile { display: none; }
 
 @media (prefers-color-scheme: dark) {
     body { background: #111; color: #eee; }
@@ -199,6 +197,30 @@ button {
   .scores-table td, .scores-table th { border-color: #444; }
   .score-chip { border-color: #aaa; }
 }
+
+.icon-btn {
+  padding: 4px;
+  margin: 0 2px;
+  border: 1px solid #999;
+  background: transparent;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.icon-btn img {
+  width: 16px;
+  height: 16px;
+  display: block;
+}
+
+.icon-btn:hover {
+  background: rgba(0,0,0,0.05);
+}
+
+.icon-btn.danger:hover {
+  background: rgba(255,0,0,0.1);
+}
+
 
 </style>
 </head>
@@ -257,9 +279,6 @@ button {
       <button id="generateRoundBtn">Generate Next Round</button>
       <button id="newSessionBtn" title="Start a brand new session using the current date/time settings">New Session</button>
       <button id="exportCsvBtn" title="Export schedules as CSV">Export CSV</button>
-      <button id="exportJsonBtn" title="Export all data (players + schedules + settings) as JSON">Export JSON</button>
-      <button id="importJsonBtn" title="Import previously exported JSON">Import JSON</button>
-      <input type="file" id="importJsonFile" accept="application/json">
       <button id="clearAllBtn" title="Clear schedules only (players and settings stay)">Clear schedules</button>
     </div>
     <div class="hint">
@@ -281,7 +300,7 @@ button {
       <th>Team B Score</th>
       <th>Sat Out</th>
       <th>Mode</th>
-      <th>Action</th>
+      <th style="width:90px;">Action</th>
     </tr>
     </thead>
     <tbody></tbody>
@@ -325,9 +344,6 @@ const changeoverDurationInput = document.getElementById('changeoverDuration');
 const generateRoundBtn = document.getElementById('generateRoundBtn');
 const newSessionBtn = document.getElementById('newSessionBtn');
 const exportCsvBtn = document.getElementById('exportCsvBtn');
-const exportJsonBtn = document.getElementById('exportJsonBtn');
-const importJsonBtn = document.getElementById('importJsonBtn');
-const importJsonFile = document.getElementById('importJsonFile');
 const clearAllBtn = document.getElementById('clearAllBtn');
 
 /** =========================
@@ -784,10 +800,11 @@ if (!history.length) {
     bPlus.addEventListener('click', () => addScore(round.id, 'B', +1));
 
     const resetBtn = document.createElement('button');
-    resetBtn.textContent = 'Reset';
-    resetBtn.title = 'Reset this round score to 0-0';
+    resetBtn.className = 'icon-btn';
+    resetBtn.title = 'Reset score';
+    resetBtn.innerHTML = `<img src="icons/reset.svg" alt="Reset">`;
     resetBtn.addEventListener('click', () => resetRoundScore(round.id));
-
+    
     actionCell.appendChild(aPlus);
     actionCell.appendChild(bPlus);
     actionCell.appendChild(resetBtn);
@@ -796,11 +813,17 @@ if (!history.length) {
     // If you want to keep it, add it after the score buttons:
     if (round.id === latestId) {
       const delBtn = document.createElement('button');
-      delBtn.textContent = 'Delete';
-      delBtn.title = 'Delete the most recently generated round';
-      delBtn.addEventListener('click', deleteLatestRound);
+      delBtn.className = 'icon-btn danger';
+      delBtn.title = 'Delete last session';
+      delBtn.innerHTML = `<img src="icons/delete.svg" alt="Delete session">`;
+
+      // ✅ ADD THIS LINE
+      delBtn.addEventListener('click', deleteLatestSession);
+
       actionCell.appendChild(delBtn);
     }
+
+
 
 
         row.appendChild(sessCell);
@@ -826,7 +849,7 @@ function makeSessionLabelRow(sessionNumber) {
   const tr = document.createElement('tr');
   tr.className = 'session-label';
   const td = document.createElement('td');
-  td.colSpan = 10;
+  td.colSpan = 12;
 
   const meta = deriveSessionMeta(sessionNumber);
   const metaText = meta
@@ -1162,49 +1185,62 @@ function chooseFairTeams(roundPlayers) {
   return bestComb;
 }
 
-/** =========================
- *  Delete latest round
- *  ========================= */
-function deleteLatestRound() {
-  const latest = getLatestRound();
-  if (!latest) return;
+    /** =========================
+     *  Delete latest round
+     *  ========================= */
+    function deleteLatestSession() {
+      if (history.length === 0) return;
 
-  history = history.filter(r => r.id !== latest.id);
-  saveState();
+      // last session = session of most recently created round
+      const latest = getLatestRound();
+      if (!latest) return;
 
-  if (history.length === 0) {
-    lastRoundStart = null;
-    lastRoundEnd = null;
-    currentSession = 1;
+      const targetSession = latest.session || 1;
 
-    prefs.sessionNumber = 1;
-    prefs.sessionDateKey = prefs.startDate || dateKeyYYYYMMDD(new Date());
-    prefs.sessionStartTime = prefs.startTime || defaultStartTimeHHMM();
-    savePrefs();
-  } else {
-    const newLatest = getLatestRound();
-    currentSession = newLatest.session || 1;
-    lastRoundStart = new Date(newLatest.start);
-    lastRoundEnd = new Date(newLatest.end);
+      const ok = confirm(`Delete Session ${targetSession}? This will remove ALL rounds (and scores) in that session.`);
+      if (!ok) return;
 
-    prefs.sessionNumber = currentSession;
+      history = history.filter(r => (r.session || 1) !== targetSession);
+      saveState();
 
-    // Derive session metadata for the latest session
-    const sessionRounds = history
-      .filter(r => (r.session || 1) === currentSession)
-      .map(r => new Date(r.start));
-    if (sessionRounds.length > 0) {
-      const minStart = sessionRounds.reduce((a,b) => a.getTime() < b.getTime() ? a : b, sessionRounds[0]);
-      prefs.sessionDateKey = dateKeyYYYYMMDD(minStart);
-      prefs.sessionStartTime = formatTimeHHMM(minStart);
+      if (history.length === 0) {
+        // everything gone
+        lastRoundStart = null;
+        lastRoundEnd = null;
+        currentSession = 1;
+
+        prefs.sessionNumber = 1;
+        prefs.sessionDateKey = prefs.startDate || dateKeyYYYYMMDD(new Date());
+        prefs.sessionStartTime = prefs.startTime || defaultStartTimeHHMM();
+        savePrefs();
+      } else {
+        // point to new latest round/session
+        const newLatest = getLatestRound();
+        currentSession = newLatest.session || 1;
+        lastRoundStart = new Date(newLatest.start);
+        lastRoundEnd = new Date(newLatest.end);
+
+        prefs.sessionNumber = currentSession;
+
+        // derive session meta for current session
+        const sessionRounds = history
+          .filter(r => (r.session || 1) === currentSession)
+          .map(r => new Date(r.start));
+
+        if (sessionRounds.length > 0) {
+          const minStart = sessionRounds.reduce((a,b) => a.getTime() < b.getTime() ? a : b, sessionRounds[0]);
+          prefs.sessionDateKey = dateKeyYYYYMMDD(minStart);
+          prefs.sessionStartTime = formatTimeHHMM(minStart);
+        }
+
+        savePrefs();
+      }
+
+      recomputePlayerStatsFromHistory();
+      renderPlayers();
+      renderHistory();
     }
-    savePrefs();
-  }
 
-  recomputePlayerStatsFromHistory();
-  renderPlayers();
-  renderHistory();
-}
 
 /** =========================
  *  Suggestions: New Session / Export+Import JSON / Clear All / Export CSV
@@ -1253,64 +1289,6 @@ function startNewSessionNow() {
 }
 
 
-function exportAllToJson() {
-  const payload = {
-    kind: "padel-scheduler-export",
-    exportVersion: 1,
-    build: BUILD_VERSION,
-    exportedAt: new Date().toISOString(),
-    players: players,
-    history: history,
-    prefs: prefs
-  };
-  downloadTextFile(
-    "padel-scheduler-export-" + safeDateStamp() + ".json",
-    JSON.stringify(payload, null, 2),
-    "application/json"
-  );
-}
-
-function importAllFromJsonFile(file) {
-  if (!file) return;
-  const reader = new FileReader();
-  reader.onload = () => {
-    try {
-      const data = JSON.parse(String(reader.result || ""));
-      // Very light validation
-      const importedPlayers = Array.isArray(data.players) ? data.players : null;
-      const importedHistory = Array.isArray(data.history) ? data.history : null;
-      const importedPrefs = (data.prefs && typeof data.prefs === "object") ? data.prefs : null;
-
-      if (!importedPlayers || !importedHistory || !importedPrefs) {
-        alert("Invalid JSON format. Expected players, history and prefs.");
-        return;
-      }
-
-      // Store
-      localStorage.setItem(KEY_PLAYERS, JSON.stringify(importedPlayers));
-      localStorage.setItem(KEY_HISTORY, JSON.stringify(importedHistory));
-      localStorage.setItem(KEY_PREFS, JSON.stringify(importedPrefs));
-
-      // Reload from storage
-      players = [];
-      history = [];
-      lastRoundEnd = null;
-      lastRoundStart = null;
-      currentSession = 1;
-      forceNewSessionStart = false;
-
-      loadState();
-      renderPlayers();
-      renderHistory();
-
-      alert("Import complete.");
-    } catch (e) {
-      alert("Could not import JSON: " + e);
-    }
-  };
-  reader.readAsText(file);
-}
-
 function clearSchedulesOnly() {
   const ok = confirm("This will delete ALL schedules only. Players and settings will remain. Continue?");
   if (!ok) return;
@@ -1342,17 +1320,20 @@ function clearSchedulesOnly() {
 function exportSchedulesToCsv() {
   const sorted = getSortedRoundsForDisplay();
 
-  const header = [
-    "Session",
-    "Round",
-    "Date",
-    "Start",
-    "End",
-    "Team A",
-    "Team B",
-    "Sat Out",
-    "Mode"
-  ];
+    const header = [
+      "Session",
+      "Round",
+      "Date",
+      "Start",
+      "End",
+      "Team A",
+      "Team A Score",
+      "Team B",
+      "Team B Score",
+      "Sat Out",
+      "Mode"
+    ];
+
 
   const lines = [];
   lines.push(header.map(csvEscape).join(","));
@@ -1370,10 +1351,13 @@ function exportSchedulesToCsv() {
       formatTimeHHMM(startDt),
       formatTimeHHMM(endDt),
       (r.teamA || []).join(" & "),
+      String(Number.isFinite(r.scoreA) ? r.scoreA : 0),
       (r.teamB || []).join(" & "),
+      String(Number.isFinite(r.scoreB) ? r.scoreB : 0),
       (r.satOut || []).join(", "),
       (r.mode || "fun")
     ];
+
 
     lines.push(row.map(csvEscape).join(","));
   });
@@ -1573,14 +1557,6 @@ generateRoundBtn.addEventListener('click', generateNextRound);
 newSessionBtn.addEventListener('click', startNewSessionNow);
 
 exportCsvBtn.addEventListener('click', exportSchedulesToCsv);
-exportJsonBtn.addEventListener('click', exportAllToJson);
-
-importJsonBtn.addEventListener('click', () => importJsonFile.click());
-importJsonFile.addEventListener('change', () => {
-  const file = importJsonFile.files && importJsonFile.files[0];
-  importAllFromJsonFile(file);
-  importJsonFile.value = ""; // allow re-import same file
-});
 
 clearAllBtn.addEventListener('click', clearSchedulesOnly);
 
